@@ -359,6 +359,7 @@
 "Assets/Scripts/Move.cs"
 "Assets/Scripts/MoveToTo.cs"
 "Assets/Scripts/Spinning.cs"
+"Assets/Scripts/SwitchMaterial.cs"
 -langversion:9.0
 
 /deterministic
