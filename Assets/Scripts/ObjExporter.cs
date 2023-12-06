@@ -25,89 +25,16 @@ struct ObjMaterial
 
 namespace MyNameSpace
 {
-    public class ObjExporter : EditorWindow
+    public class ObjExporter : MonoBehaviour
     {
         public List<MeshFilter> meshFilters;
         public static string targetFolder = "ExportedObj";
-
-        protected SerializedObject serializedObject;
-        protected SerializedProperty assetLstProperty;
-
-        private Vector2 scrollPos;
-
-        ObjExporter()
-        {
-            titleContent = new GUIContent("ObjExporter");
-        }
-
-        [MenuItem("Tools/Export/ObjExporter Window")]
-        static void CreateWindows()
-        {
-            GetWindow(typeof(ObjExporter));
-        }
-
-        void OnEnable()
-        {
-            serializedObject = new SerializedObject(this);
-            assetLstProperty = serializedObject.FindProperty("meshFilters");
-        }
-
-        void OnGUI()
-        {
-            serializedObject.Update();
-            scrollPos = GUILayout.BeginScrollView(scrollPos, GUILayout.Width(position.width), GUILayout.Height(position.height));
-            GUILayout.BeginVertical();
-            EditorGUILayout.HelpBox("Please select the MeshFilter of the mesh you want to export.", MessageType.Info);
-            EditorGUI.BeginChangeCheck();
-            EditorGUILayout.PropertyField(assetLstProperty, new GUIContent("MeshFilters : "), true);
-            if (EditorGUI.EndChangeCheck())
-            {
-             serializedObject.ApplyModifiedProperties();
-            }
-            EditorGUILayout.HelpBox("Please input the target folder.", MessageType.Info);
-            targetFolder = EditorGUILayout.TextField(new GUIContent("TargetFolder : "), targetFolder);
-            EditorGUILayout.HelpBox("The OBJs will be saved in your project root directory.", MessageType.Info);
-            if (GUILayout.Button("Export OBJs"))
-            {
-                ExportOBJsByObjExporterWindow();
-            }
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-        }
-
-        void ExportOBJsByObjExporterWindow()
-        {
-            if (!CreateTargetFolder())
-                return;
-
-            if (meshFilters.Count == 0)
-            {
-                EditorUtility.DisplayDialog("No MeshFilters in the list!", "Please select one or more MeshFilters", "OK");
-                return;
-            }
-
-            int exportedObjects = 0;
-
-            for (int i = 0; i < meshFilters.Count; i++)
-            {
-                exportedObjects++;
-                MeshToFile(meshFilters[i], targetFolder, meshFilters[i].name);
-            }
-
-            if (exportedObjects > 0)
-                EditorUtility.DisplayDialog("Objects exported", "Exported " + exportedObjects + " objects", "OK");
-            else
-                EditorUtility.DisplayDialog("Objects not exported", "Make sure at least some of your selected objects have mesh filters!", "OK");
-
-            meshFilters.Clear();
-            GetWindow(typeof(ObjExporter)).Repaint();
-        }
 
         private static int vertexOffset = 0;
         private static int normalOffset = 0;
         private static int uvOffset = 0;
 
-        private static string MeshToString(MeshFilter mf, Dictionary<string, ObjMaterial> materialList)
+        private static string MeshToString(MeshFilter mf, Dictionary<string, ObjMaterial> materialList, string textureFolderPath)
         {
             Mesh m = mf.sharedMesh;
             Material[] mats = mf.GetComponent<Renderer>().sharedMaterials;
@@ -149,17 +76,19 @@ namespace MyNameSpace
                     };
 
                     if (mats[material].mainTexture)
-                        objMaterial.textureName = AssetDatabase.GetAssetPath(mats[material].mainTexture);
+                    {
+                        objMaterial.textureName = Path.Combine(textureFolderPath, mats[material].mainTexture.name);
+                    }
                     else
+                    {
                         objMaterial.textureName = null;
+                    }
 
                     materialList.Add(objMaterial.name, objMaterial);
                 }
                 catch (ArgumentException)
                 {
-
                 }
-
 
                 int[] triangles = m.GetTriangles(material);
                 for (int i = 0; i < triangles.Length; i += 3)
@@ -175,6 +104,7 @@ namespace MyNameSpace
 
             return sb.ToString();
         }
+
 
         private static void Clear()
         {
@@ -239,7 +169,7 @@ namespace MyNameSpace
             }
         }
 
-        private static void MeshToFile(MeshFilter mf, string folder, string filename)
+        private static void MeshToFile(MeshFilter mf, string folder, string filename, string textureFolderPath)
         {
             Dictionary<string, ObjMaterial> materialList = PrepareFileWrite();
 
@@ -247,24 +177,7 @@ namespace MyNameSpace
             {
                 sw.Write("mtllib ./" + filename + ".mtl\n");
 
-                sw.Write(MeshToString(mf, materialList));
-            }
-
-            MaterialsToFile(materialList, folder, filename);
-        }
-
-        private static void MeshesToFile(MeshFilter[] mf, string folder, string filename)
-        {
-            Dictionary<string, ObjMaterial> materialList = PrepareFileWrite();
-
-            using (StreamWriter sw = new StreamWriter(folder + Path.DirectorySeparatorChar + filename + ".obj"))
-            {
-                sw.Write("mtllib ./" + filename + ".mtl\n");
-
-                for (int i = 0; i < mf.Length; i++)
-                {
-                    sw.Write(MeshToString(mf[i], materialList));
-                }
+                sw.Write(MeshToString(mf, materialList, textureFolderPath));
             }
 
             MaterialsToFile(materialList, folder, filename);
@@ -277,86 +190,13 @@ namespace MyNameSpace
             }
             catch
             {
-                EditorUtility.DisplayDialog("Error!", "Failed to create target folder!", "OK");
                 return false;
             }
 
             return true;
         }
 
-        [MenuItem("Tools/Export/Quickly export all MeshFilters in selection to separate OBJs")]
-        public static void ExportSelectionToSeparate()
-        {
-            if (!CreateTargetFolder())
-                return;
-
-            Transform[] selection = Selection.GetTransforms(SelectionMode.Editable | SelectionMode.ExcludePrefab);
-
-            if (selection.Length == 0)
-            {
-                EditorUtility.DisplayDialog("No source object selected!", "Please select one or more target objects", "OK");
-                return;
-            }
-
-            int exportedObjects = 0;
-
-            for (int i = 0; i < selection.Length; i++)
-            {
-                Component[] meshfilter = selection[i].GetComponentsInChildren(typeof(MeshFilter));
-
-                for (int m = 0; m < meshfilter.Length; m++)
-                {
-                    exportedObjects++;
-                    MeshToFile((MeshFilter)meshfilter[m], targetFolder, selection[i].name + "_" + i + "_" + m);
-                }
-            }
-
-            if (exportedObjects > 0)
-                EditorUtility.DisplayDialog("Objects exported", "Exported " + exportedObjects + " objects", "OK");
-            else
-                EditorUtility.DisplayDialog("Objects not exported", "Make sure at least some of your selected objects have mesh filters!", "OK");
-        }
-
-        [MenuItem("Tools/Export/Quickly export each selected to single OBJ")]
-        public static void ExportEachSelectionToSingle()
-        {
-            if (!CreateTargetFolder())
-                return;
-
-            Transform[] selection = Selection.GetTransforms(SelectionMode.Editable | SelectionMode.ExcludePrefab);
-
-            if (selection.Length == 0)
-            {
-                EditorUtility.DisplayDialog("No source object selected!", "Please select one or more target objects", "OK");
-                return;
-            }
-
-            int exportedObjects = 0;
-
-            for (int i = 0; i < selection.Length; i++)
-            {
-                Component[] meshfilter = selection[i].GetComponentsInChildren(typeof(MeshFilter));
-
-                MeshFilter[] mf = new MeshFilter[meshfilter.Length];
-
-                for (int m = 0; m < meshfilter.Length; m++)
-                {
-                    exportedObjects++;
-                    mf[m] = (MeshFilter)meshfilter[m];
-                }
-
-                MeshesToFile(mf, targetFolder, selection[i].name + "_" + i);
-            }
-
-            if (exportedObjects > 0)
-            {
-                EditorUtility.DisplayDialog("Objects exported", "Exported " + exportedObjects + " objects", "OK");
-            }
-            else
-                EditorUtility.DisplayDialog("Objects not exported", "Make sure at least some of your selected objects have mesh filters!", "OK");
-        }
-
-        public static void ExportSelectedObj(string materialName, MeshFilter[] meshFilters, string exportFileName)
+        public static void ExportSelectedObj(string materialName, MeshFilter[] meshFilters, string exportFileName, string textureFolderPath)
         { 
             string folderPath = Path.GetDirectoryName(Application.dataPath); // Или Application.persistentDataPath
             string fullPath = Path.Combine(folderPath, exportFileName + ".obj");
@@ -376,7 +216,7 @@ namespace MyNameSpace
                         if (mat != null && mat.name.Equals(materialName, StringComparison.OrdinalIgnoreCase))
                         {
                             filteredMeshFilters.Add(mf);
-                                break; // Прерываем, так как нужный материал найден
+                                break; 
                         }
                     }
                 }
@@ -384,15 +224,10 @@ namespace MyNameSpace
 
             if (filteredMeshFilters.Count > 0)
             {
-                ExportMeshesToFile(filteredMeshFilters.ToArray(), targetFolder, exportFileName);
-                EditorUtility.DisplayDialog("Export Complete", $"Exported {filteredMeshFilters.Count} MeshFilters with '{materialName}' material into '{exportFileName}.obj'.", "OK");
-            }
-            else
-            {
-                EditorUtility.DisplayDialog("Export Not Complete", "No MeshFilters with the specified material were found.", "OK");
+                ExportMeshesToFile(filteredMeshFilters.ToArray(), targetFolder, exportFileName, textureFolderPath);
             }
         }
-        private static void ExportMeshesToFile(MeshFilter[] meshFilters, string folder, string filename)
+        private static void ExportMeshesToFile(MeshFilter[] meshFilters, string folder, string filename, string textureFolderPath)
         {   
             Dictionary<string, ObjMaterial> materialList = PrepareFileWrite();
 
@@ -402,7 +237,7 @@ namespace MyNameSpace
 
                 for (int i = 0; i < meshFilters.Length; i++)
                 {
-                    sw.Write(MeshToString(meshFilters[i], materialList));
+                    sw.Write(MeshToString(meshFilters[i], materialList, textureFolderPath));
                 }
             }
 

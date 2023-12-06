@@ -48,7 +48,7 @@ public class Export : MonoBehaviour
         if (filteredMeshFilters.Count > 0)
         {
          string uniqueFileName = GenerateUniqueFileName("ExportedModel");
-         MyNameSpace.ObjExporter.ExportSelectedObj("SelectedGlowMaterial", filteredMeshFilters.ToArray(), uniqueFileName);
+         MyNameSpace.ObjExporter.ExportSelectedObj("SelectedGlowMaterial", filteredMeshFilters.ToArray(), uniqueFileName, "ExportedObj");
          Debug.Log("Exported " + filteredMeshFilters.Count + " objects into " + uniqueFileName);
         }
     }
